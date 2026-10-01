@@ -1,11 +1,19 @@
 """Validated application settings."""
 
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
+from pydantic import BaseModel, Field, StringConstraints
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+class RSSFeedConfig(BaseModel):
+    """One explicitly configured RSS/Atom feed."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+    url: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2048)]
 
 
 class Settings(BaseSettings):
@@ -22,6 +30,7 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     database_url: str | None = None
+    rss_feeds: list[RSSFeedConfig] = Field(default_factory=list)
 
 
 settings = Settings()

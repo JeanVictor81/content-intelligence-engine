@@ -23,7 +23,7 @@ class Content(Base):
     source_id: Mapped[int] = mapped_column(
         ForeignKey("sources.id", ondelete="RESTRICT"), nullable=False
     )
-    external_id: Mapped[str | None] = mapped_column(String(512))
+    external_id: Mapped[str | None] = mapped_column(Text)
     url: Mapped[str] = mapped_column(Text, nullable=False)
     title: Mapped[str | None] = mapped_column(Text)
     text_excerpt: Mapped[str | None] = mapped_column(Text)
