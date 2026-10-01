@@ -58,13 +58,9 @@ def normalize_rss_item(item: RSSFeedItem) -> NormalizedRSSItem:
         raise NormalizationError("RSS entry must have an absolute HTTP or HTTPS URL.")
 
     title = _optional_text(entry.get("title"))
-    excerpt = _optional_text(entry.get("summary")) or _optional_text(
-        entry.get("description")
-    )
+    excerpt = _optional_text(entry.get("summary")) or _optional_text(entry.get("description"))
     author = _optional_text(entry.get("author"))
-    external_id = _optional_text(entry.get("id")) or _optional_text(
-        entry.get("guid")
-    )
+    external_id = _optional_text(entry.get("id")) or _optional_text(entry.get("guid"))
     published_at = _publication_datetime(entry)
 
     return NormalizedRSSItem(
@@ -103,9 +99,7 @@ def _publication_datetime(entry: Mapping[str, Any]) -> datetime | None:
     if isinstance(parsed, struct_time):
         return datetime(*parsed[:6], tzinfo=UTC)
 
-    raw_date = _optional_text(entry.get("published")) or _optional_text(
-        entry.get("updated")
-    )
+    raw_date = _optional_text(entry.get("published")) or _optional_text(entry.get("updated"))
     if raw_date is None:
         return None
     try:

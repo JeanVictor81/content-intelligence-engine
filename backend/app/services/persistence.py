@@ -1,15 +1,14 @@
 """Persist normalized source and content records using a caller-owned transaction."""
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models import Content, Source
+from app.services.deduplication import find_duplicate
 from app.services.normalization import NormalizedRSSItem
 
 
-def persist_normalized_items(
-    session: Session, items: list[NormalizedRSSItem]
-) -> list[Content]:
+def persist_normalized_items(session: Session, items: list[NormalizedRSSItem]) -> list[Content]:
     """Store normalized RSS items and reuse existing source records.
 
     Source identity is the pair ``(platform, base_url)``. Content duplicates are
@@ -19,6 +18,16 @@ def persist_normalized_items(
     if not items:
         return []
 
+    candidates = list(
+        session.scalars(
+            select(Content)
+            .options(
+                selectinload(Content.source),
+                selectinload(Content.duplicate_of),
+            )
+            .order_by(Content.id)
+        ).all()
+    )
     sources: dict[tuple[str, str], Source] = {}
     persisted: list[Content] = []
 
@@ -58,8 +67,14 @@ def persist_normalized_items(
             published_at=content_data.published_at,
             metadata_=content_data.metadata,
         )
+        match = find_duplicate(item, source, candidates)
+        if match is not None:
+            content.duplicate_of = match.canonical_content
+            content.duplicate_match_type = match.match_type
+            content.duplicate_similarity = match.similarity
         session.add(content)
         persisted.append(content)
+        candidates.append(content)
 
     session.flush()
     return persisted

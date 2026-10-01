@@ -1,6 +1,7 @@
 """RSS and Atom connector for application-configured feeds."""
 
 import ipaddress
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -14,6 +15,7 @@ from app.connectors.base import SearchOptions
 DEFAULT_TIMEOUT_SECONDS = 8.0
 DEFAULT_MAX_FEED_BYTES = 2 * 1024 * 1024
 USER_AGENT = "ContentIntelligenceEngine/0.1 (+local research client)"
+logger = logging.getLogger(__name__)
 
 
 class RSSConnectorError(Exception):
@@ -42,10 +44,7 @@ class RSSFeed:
             raise ValueError("Feed URL must be an absolute HTTP or HTTPS URL.")
         if parsed.username is not None or parsed.password is not None:
             raise ValueError("Feed URLs must not contain embedded credentials.")
-        if (
-            hostname == "localhost"
-            or hostname.endswith((".localhost", ".local", ".internal"))
-        ):
+        if hostname == "localhost" or hostname.endswith((".localhost", ".local", ".internal")):
             raise ValueError("Local or internal feed hosts are not allowed.")
         try:
             address = ipaddress.ip_address(hostname)
@@ -103,10 +102,7 @@ class RSSConnector:
             follow_redirects=False,
             headers={
                 "User-Agent": USER_AGENT,
-                "Accept": (
-                    "application/rss+xml, application/atom+xml, "
-                    "application/xml, text/xml"
-                ),
+                "Accept": ("application/rss+xml, application/atom+xml, application/xml, text/xml"),
             },
         ) as client:
             return self._search_with_client(normalized_query, search_options, client)
@@ -119,11 +115,28 @@ class RSSConnector:
         self, query: str, options: SearchOptions, client: httpx.Client
     ) -> list[RSSFeedItem]:
         results: list[RSSFeedItem] = []
-        for feed in self._feeds:
-            payload = self._read_feed(client, feed)
-            parsed_feed = feedparser.parse(payload)
-            if parsed_feed.get("bozo"):
-                raise FeedParseError(f"Configured feed '{feed.name}' is malformed.")
+        successful_feed_count = 0
+        failed_feed_count = 0
+        last_feed_error: RSSConnectorError | None = None
+        for feed_index, feed in enumerate(self._feeds):
+            try:
+                payload = self._read_feed(client, feed)
+                parsed_feed = feedparser.parse(payload)
+                if parsed_feed.get("bozo"):
+                    raise FeedParseError(f"Configured feed '{feed.name}' is malformed.")
+            except RSSConnectorError as exc:
+                failed_feed_count += 1
+                last_feed_error = exc
+                logger.warning(
+                    "rss_feed_search_failed",
+                    extra={
+                        "feed_index": feed_index,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+                continue
+
+            successful_feed_count += 1
 
             for entry in parsed_feed.entries:
                 searchable_fields = [
@@ -138,6 +151,19 @@ class RSSConnector:
                     results.append(RSSFeedItem(feed=feed, raw_entry=entry))
                     if len(results) >= options.max_results:
                         return results
+
+        if successful_feed_count == 0:
+            if last_feed_error is not None:
+                raise last_feed_error
+            raise FeedFetchError("All configured RSS feeds failed.")
+        if failed_feed_count:
+            logger.warning(
+                "rss_search_completed_with_feed_failures",
+                extra={
+                    "successful_feed_count": successful_feed_count,
+                    "failed_feed_count": failed_feed_count,
+                },
+            )
         return results
 
     def _read_feed(self, client: httpx.Client, feed: RSSFeed) -> bytes:

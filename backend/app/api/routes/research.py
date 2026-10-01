@@ -59,6 +59,8 @@ def research_topic(
             query=request.query,
             result_count=0,
             skipped_count=skipped_count,
+            duplicate_count=0,
+            similarity_candidate_count=0,
             results=[],
         )
 
@@ -75,6 +77,9 @@ def research_topic(
                         source_type=item.source.source_type,
                     ),
                     external_id=item.content.external_id,
+                    duplicate_of_id=content.duplicate_of_id,
+                    duplicate_match_type=content.duplicate_match_type,
+                    duplicate_similarity=content.duplicate_similarity,
                     url=item.content.url,
                     title=item.content.title,
                     text_excerpt=item.content.text_excerpt,
@@ -87,13 +92,17 @@ def research_topic(
             ]
     except SQLAlchemyError as exc:
         logger.exception("research_persistence_failed")
-        raise HTTPException(
-            status_code=503, detail="Research results could not be saved."
-        ) from exc
+        raise HTTPException(status_code=503, detail="Research results could not be saved.") from exc
 
     return ResearchResponse(
         query=request.query,
         result_count=len(results),
         skipped_count=skipped_count,
+        duplicate_count=sum(
+            result.duplicate_match_type in {"exact_url", "source_external_id"} for result in results
+        ),
+        similarity_candidate_count=sum(
+            result.duplicate_match_type == "similar_title_candidate" for result in results
+        ),
         results=results,
     )

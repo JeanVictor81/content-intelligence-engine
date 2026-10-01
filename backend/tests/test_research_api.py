@@ -46,6 +46,9 @@ def test_research_searches_normalizes_persists_and_returns_results(monkeypatch) 
         id=15,
         source=source,
         external_id="sample-1",
+        duplicate_of_id=4,
+        duplicate_match_type="similar_title_candidate",
+        duplicate_similarity=0.95,
         url="https://news.example/item-1",
         title="CBLOL sample result",
         text_excerpt="A sample feed item.",
@@ -65,9 +68,7 @@ def test_research_searches_normalizes_persists_and_returns_results(monkeypatch) 
             return [RAW_ITEM]
 
     monkeypatch.setattr(research_route, "RSSConnector", StubRSSConnector)
-    monkeypatch.setattr(
-        research_route, "persist_normalized_items", Mock(return_value=[content])
-    )
+    monkeypatch.setattr(research_route, "persist_normalized_items", Mock(return_value=[content]))
 
     try:
         with make_client(session) as client:
@@ -78,8 +79,12 @@ def test_research_searches_normalizes_persists_and_returns_results(monkeypatch) 
     assert response.status_code == 200
     body = response.json()
     assert body["result_count"] == 1
+    assert body["duplicate_count"] == 0
+    assert body["similarity_candidate_count"] == 1
     assert body["skipped_count"] == 0
     assert body["results"][0]["id"] == 15
+    assert body["results"][0]["duplicate_of_id"] == 4
+    assert body["results"][0]["duplicate_match_type"] == "similar_title_candidate"
     assert body["results"][0]["source"]["name"] == "Sample Feed"
     assert body["results"][0]["url"] == "https://news.example/item-1"
     assert body["results"][0]["collected_at"] == "2026-10-01T00:00:00Z"
@@ -163,6 +168,8 @@ def test_research_empty_search_does_not_open_database_transaction(monkeypatch) -
 
     assert response.status_code == 200
     assert response.json()["result_count"] == 0
+    assert response.json()["duplicate_count"] == 0
+    assert response.json()["similarity_candidate_count"] == 0
     assert response.json()["results"] == []
     persist.assert_not_called()
     session.begin.assert_not_called()

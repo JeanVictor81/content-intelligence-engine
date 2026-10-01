@@ -29,6 +29,9 @@ class ContentResult(BaseModel):
     id: int
     source: SourceResult
     external_id: str | None
+    duplicate_of_id: int | None
+    duplicate_match_type: str | None
+    duplicate_similarity: float | None
     url: str
     title: str | None
     text_excerpt: str | None
@@ -44,4 +47,6 @@ class ResearchResponse(BaseModel):
     query: str
     result_count: int
     skipped_count: int
+    duplicate_count: int
+    similarity_candidate_count: int
     results: list[ContentResult]

@@ -81,3 +81,22 @@ def test_oversized_feed_is_rejected() -> None:
 
         with pytest.raises(FeedFetchError, match="exceeds the size limit"):
             connector.search("cblol")
+
+
+def test_search_returns_results_when_one_configured_feed_fails() -> None:
+    failed_feed = RSSFeed(name="Unavailable Feed", url="https://unavailable.example/feed.xml")
+    working_feed = RSSFeed(name="Working Feed", url="https://working.example/feed.xml")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url == httpx.URL(failed_feed.url):
+            return httpx.Response(503, request=request)
+        return httpx.Response(200, content=FIXTURE_PATH.read_bytes(), request=request)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        connector = RSSConnector([failed_feed, working_feed], client=client)
+
+        results = connector.search("cblol")
+
+    assert len(results) == 1
+    assert results[0].feed == working_feed
+    assert results[0].raw_entry["title"] == "CBLOL announces a new match schedule"

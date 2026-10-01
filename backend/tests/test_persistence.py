@@ -10,9 +10,9 @@ from app.services.persistence import persist_normalized_items
 FEED = RSSFeed(name="Sample Esports Feed", url="https://news.example/feed.xml")
 
 
-def normalized_item(url: str = "https://news.example/item"):
+def normalized_item(url: str = "https://news.example/item", *, feed: RSSFeed = FEED):
     item = RSSFeedItem(
-        feed=FEED,
+        feed=feed,
         raw_entry={"link": url, "title": "An item", "guid": url},
     )
     return normalize_rss_item(item)
@@ -28,6 +28,7 @@ def test_persists_content_and_reuses_existing_source() -> None:
     )
     session = Mock()
     session.scalar.return_value = source
+    session.scalars.return_value.all.return_value = []
 
     saved = persist_normalized_items(
         session,
@@ -50,6 +51,7 @@ def test_persists_content_and_reuses_existing_source() -> None:
 def test_creates_source_when_missing() -> None:
     session = Mock()
     session.scalar.return_value = None
+    session.scalars.return_value.all.return_value = []
 
     saved = persist_normalized_items(session, [normalized_item()])
 
@@ -64,9 +66,36 @@ def test_creates_source_when_missing() -> None:
 
 def test_empty_input_does_not_query_or_flush() -> None:
     session = Mock()
+    session.scalars.return_value.all.return_value = []
 
     assert persist_normalized_items(session, []) == []
 
     session.scalar.assert_not_called()
     session.add.assert_not_called()
     session.flush.assert_not_called()
+
+
+def test_persists_duplicate_as_a_linked_record_without_losing_its_source() -> None:
+    second_feed = RSSFeed(name="Sample Syndicated Feed", url="https://syndicated.example/feed.xml")
+    session = Mock()
+    session.scalar.return_value = None
+    session.scalars.return_value.all.return_value = []
+
+    saved = persist_normalized_items(
+        session,
+        [
+            normalized_item("https://news.example/story?utm_source=first"),
+            normalized_item("https://news.example/story?utm_source=second", feed=second_feed),
+        ],
+    )
+
+    first_source, first_content, second_source, second_content = (
+        entry.args[0] for entry in session.add.call_args_list
+    )
+    assert saved == [first_content, second_content]
+    assert first_content.source is first_source
+    assert second_content.source is second_source
+    assert second_content is not first_content
+    assert second_content.duplicate_of is first_content
+    assert second_content.duplicate_match_type == "exact_url"
+    assert second_content.duplicate_similarity == 1.0

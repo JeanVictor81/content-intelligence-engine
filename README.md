@@ -14,3 +14,9 @@
 
 The example feed URL is illustrative. Replace it with a feed you are authorized to access.
 `GET /health` checks whether the API process is responsive.
+
+Research results retain every collected record and source. The response marks exact URL or
+same-feed identifier duplicates and flags high-similarity headlines published within 48 hours
+as candidates for review. `duplicate_count` excludes these candidates, which are reported
+separately as `similarity_candidate_count`; title candidates are not treated as confirmed
+duplicate evidence.
