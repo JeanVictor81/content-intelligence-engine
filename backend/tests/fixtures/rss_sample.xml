@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Sample Esports Feed</title>
+    <link>https://news.example/</link>
+    <description>Fixture feed for offline connector checks</description>
+    <item>
+      <title>CBLOL announces a new match schedule</title>
+      <link>https://news.example/cblol-schedule</link>
+      <guid>cblol-schedule-1</guid>
+      <description>The league published its upcoming schedule.</description>
+      <author>Editor A</author>
+      <pubDate>Tue, 29 Sep 2026 12:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Regional tournament results</title>
+      <link>https://news.example/regional-results</link>
+      <guid>regional-results-1</guid>
+      <description>A result unrelated to the search term.</description>
+      <author>Editor B</author>
+      <pubDate>Tue, 29 Sep 2026 13:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
