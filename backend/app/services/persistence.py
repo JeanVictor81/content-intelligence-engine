@@ -4,16 +4,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Content, Source
-from app.services.deduplication import find_duplicate
+from app.services.deduplication import canonicalize_url, find_duplicate
 from app.services.normalization import NormalizedRSSItem
 
 
 def persist_normalized_items(session: Session, items: list[NormalizedRSSItem]) -> list[Content]:
     """Store normalized RSS items and reuse existing source records.
 
-    Source identity is the pair ``(platform, base_url)``. Content duplicates are
-    intentionally retained for the later deduplication stage. This function
-    flushes pending rows but leaves commit and rollback to its caller.
+    Source identity is the pair ``(platform, base_url)``. Repeated items from
+    the same source and URL reuse their existing row, while matching content
+    from different sources remains separately stored for traceability. This
+    function flushes pending rows but leaves commit and rollback to its caller.
     """
     if not items:
         return []
@@ -57,6 +58,25 @@ def persist_normalized_items(session: Session, items: list[NormalizedRSSItem]) -
             sources[source_key] = source
 
         content_data = item.content
+        existing = next(
+            (
+                candidate
+                for candidate in candidates
+                if (candidate.source.platform, candidate.source.base_url) == source_key
+                and (
+                    canonicalize_url(candidate.url) == canonicalize_url(content_data.url)
+                    or (
+                        content_data.external_id is not None
+                        and candidate.external_id == content_data.external_id
+                    )
+                )
+            ),
+            None,
+        )
+        if existing is not None:
+            persisted.append(existing)
+            continue
+
         content = Content(
             source=source,
             external_id=content_data.external_id,

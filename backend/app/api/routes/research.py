@@ -11,9 +11,16 @@ from app.connectors.base import SearchOptions
 from app.connectors.rss import RSSConnector, RSSConnectorError, RSSFeed
 from app.core.config import settings
 from app.database.session import get_db
-from app.schemas.research import ContentResult, ResearchRequest, ResearchResponse, SourceResult
+from app.schemas.research import (
+    ContentResult,
+    ResearchRequest,
+    ResearchResponse,
+    SourceResult,
+    TopicResult,
+)
 from app.services.normalization import NormalizationError, normalize_rss_item
 from app.services.persistence import persist_normalized_items
+from app.services.topic_persistence import persist_topic_groups, unique_topic_contents
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -61,12 +68,14 @@ def research_topic(
             skipped_count=skipped_count,
             duplicate_count=0,
             similarity_candidate_count=0,
+            topics=[],
             results=[],
         )
 
     try:
         with session.begin():
             contents = persist_normalized_items(session, normalized_items)
+            topics = persist_topic_groups(session, request.query, contents)
             results = [
                 ContentResult(
                     id=content.id,
@@ -90,6 +99,19 @@ def research_topic(
                 )
                 for item, content in zip(normalized_items, contents, strict=True)
             ]
+            topic_results = []
+            for topic in topics:
+                topic_contents = unique_topic_contents(topic)
+                topic_results.append(
+                    TopicResult(
+                        id=topic.id,
+                        title=topic.title,
+                        content_ids=[content.id for content in topic_contents],
+                        content_count=len(topic_contents),
+                        first_seen_at=topic.first_seen_at,
+                        last_seen_at=topic.last_seen_at,
+                    )
+                )
     except SQLAlchemyError as exc:
         logger.exception("research_persistence_failed")
         raise HTTPException(status_code=503, detail="Research results could not be saved.") from exc
@@ -104,5 +126,6 @@ def research_topic(
         similarity_candidate_count=sum(
             result.duplicate_match_type == "similar_title_candidate" for result in results
         ),
+        topics=topic_results,
         results=results,
     )

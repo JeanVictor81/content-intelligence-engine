@@ -99,3 +99,49 @@ def test_persists_duplicate_as_a_linked_record_without_losing_its_source() -> No
     assert second_content.duplicate_of is first_content
     assert second_content.duplicate_match_type == "exact_url"
     assert second_content.duplicate_similarity == 1.0
+
+
+def test_repeated_url_from_same_source_reuses_existing_content_row() -> None:
+    session = Mock()
+    session.scalar.return_value = None
+    session.scalars.return_value.all.return_value = []
+
+    saved = persist_normalized_items(
+        session,
+        [
+            normalized_item("https://news.example/story?utm_source=first"),
+            normalized_item("https://news.example/story?utm_source=second"),
+        ],
+    )
+
+    assert saved[0] is saved[1]
+    content_additions = [
+        entry.args[0] for entry in session.add.call_args_list if isinstance(entry.args[0], Content)
+    ]
+    assert content_additions == [saved[0]]
+
+
+def test_repeated_search_reuses_persisted_same_source_content() -> None:
+    source = Source(
+        id=7,
+        name=FEED.name,
+        platform="rss",
+        base_url=FEED.url,
+        source_type="feed",
+    )
+    existing = Content(
+        id=21,
+        source=source,
+        external_id="sample-guid",
+        url="https://news.example/item",
+        title="An item",
+    )
+    session = Mock()
+    session.scalar.return_value = source
+    session.scalars.return_value.all.return_value = [existing]
+
+    saved = persist_normalized_items(session, [normalized_item()])
+
+    assert saved == [existing]
+    session.add.assert_not_called()
+    session.flush.assert_called_once_with()

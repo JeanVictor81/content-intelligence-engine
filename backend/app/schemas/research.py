@@ -41,6 +41,17 @@ class ContentResult(BaseModel):
     metadata: dict[str, Any]
 
 
+class TopicResult(BaseModel):
+    """A persisted topic and the content records associated with it."""
+
+    id: int
+    title: str | None
+    content_ids: list[int]
+    content_count: int
+    first_seen_at: datetime
+    last_seen_at: datetime
+
+
 class ResearchResponse(BaseModel):
     """Summary and persisted items returned by a research request."""
 
@@ -49,4 +60,5 @@ class ResearchResponse(BaseModel):
     skipped_count: int
     duplicate_count: int
     similarity_candidate_count: int
+    topics: list[TopicResult]
     results: list[ContentResult]

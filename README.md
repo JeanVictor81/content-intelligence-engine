@@ -20,3 +20,12 @@ same-feed identifier duplicates and flags high-similarity headlines published wi
 as candidates for review. `duplicate_count` excludes these candidates, which are reported
 separately as `similarity_candidate_count`; title candidates are not treated as confirmed
 duplicate evidence.
+
+Research responses also include query-scoped topics. Content remains stored independently and
+is linked to a topic when headlines share at least three informative terms, meet the similarity
+threshold and were published within 48 hours. This lets related coverage of one event reuse a
+topic across searches while keeping distinct events separate. Repeated items from the same RSS
+source and canonical URL reuse their content record; copies from other sources remain preserved.
+Topic counts include one item per source and canonical URL, so repeated collections do not inflate
+the count. Existing topic rows are matched against their linked headlines before a new topic is
+created.

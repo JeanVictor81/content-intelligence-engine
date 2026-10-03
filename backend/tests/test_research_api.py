@@ -1,6 +1,7 @@
 """Offline tests for the end-to-end research API route."""
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
 from fastapi.testclient import TestClient
@@ -69,6 +70,23 @@ def test_research_searches_normalizes_persists_and_returns_results(monkeypatch) 
 
     monkeypatch.setattr(research_route, "RSSConnector", StubRSSConnector)
     monkeypatch.setattr(research_route, "persist_normalized_items", Mock(return_value=[content]))
+    repeated_content = Content(
+        id=16,
+        source=source,
+        url="https://news.example/item-1?utm_source=repeat",
+        title="CBLOL sample result",
+    )
+    topic = SimpleNamespace(
+        id=31,
+        title="CBLOL sample result",
+        content_links=[
+            SimpleNamespace(content_id=15, content=content),
+            SimpleNamespace(content_id=16, content=repeated_content),
+        ],
+        first_seen_at=datetime(2026, 10, 1, tzinfo=UTC),
+        last_seen_at=datetime(2026, 10, 1, tzinfo=UTC),
+    )
+    monkeypatch.setattr(research_route, "persist_topic_groups", Mock(return_value=[topic]))
 
     try:
         with make_client(session) as client:
@@ -88,6 +106,16 @@ def test_research_searches_normalizes_persists_and_returns_results(monkeypatch) 
     assert body["results"][0]["source"]["name"] == "Sample Feed"
     assert body["results"][0]["url"] == "https://news.example/item-1"
     assert body["results"][0]["collected_at"] == "2026-10-01T00:00:00Z"
+    assert body["topics"] == [
+        {
+            "id": 31,
+            "title": "CBLOL sample result",
+            "content_ids": [15],
+            "content_count": 1,
+            "first_seen_at": "2026-10-01T00:00:00Z",
+            "last_seen_at": "2026-10-01T00:00:00Z",
+        }
+    ]
     session.begin.assert_called_once_with()
 
 
@@ -157,8 +185,10 @@ def test_research_empty_search_does_not_open_database_transaction(monkeypatch) -
             return []
 
     persist = Mock()
+    persist_topics = Mock()
     monkeypatch.setattr(research_route, "RSSConnector", EmptyRSSConnector)
     monkeypatch.setattr(research_route, "persist_normalized_items", persist)
+    monkeypatch.setattr(research_route, "persist_topic_groups", persist_topics)
 
     try:
         with make_client(session) as client:
@@ -170,6 +200,8 @@ def test_research_empty_search_does_not_open_database_transaction(monkeypatch) -
     assert response.json()["result_count"] == 0
     assert response.json()["duplicate_count"] == 0
     assert response.json()["similarity_candidate_count"] == 0
+    assert response.json()["topics"] == []
     assert response.json()["results"] == []
     persist.assert_not_called()
+    persist_topics.assert_not_called()
     session.begin.assert_not_called()
